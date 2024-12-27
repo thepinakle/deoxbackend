@@ -1,20 +1,20 @@
 from django.contrib import admin
 from .models import Restaurant, Products, Payments, All_Orders, OrderItems, RestaurantOrderView, Cart
 
-class AllOrdersAdmin(admin.ModelAdmin):
-    list_display = ('order_no', 'user', 'total', 'hostel_name', 'block_number', 'room_number', 'date')
-    search_fields = ('order_no', 'user__username', 'hostel_name', 'block_number', 'room_number')
-    list_filter = ('date',)
-
-class OrderItemsAdmin(admin.ModelAdmin):
-    list_display = ('order', 'product', 'quantity', 'price', 'total', 'user')
-    search_fields = ('order__order_no', 'product__product_name', 'user__username')
-    list_filter = ('order',)
-
+@admin.register(Payments)
 class PaymentsAdmin(admin.ModelAdmin):
-    list_display = ('user', 'amount', 'mobile', 'payments_status', 'mpesa_receipt_number', 'mpesa_transaction_date')
+    list_display = ('user', 'mobile', 'amount', 'payments_status', 'mpesa_receipt_number', 'mpesa_transaction_date')
     search_fields = ('user__username', 'mobile', 'mpesa_receipt_number')
-    list_filter = ('payments_status', 'mpesa_transaction_date')
+
+@admin.register(All_Orders)
+class AllOrdersAdmin(admin.ModelAdmin):
+    list_display = ('user', 'mobile', 'hostel_name', 'block_number', 'room_number', 'date', 'order_no', 'total')
+    search_fields = ('user__username', 'mobile', 'order_no')
+
+@admin.register(OrderItems)
+class OrderItemsAdmin(admin.ModelAdmin):
+    list_display = ('order', 'product', 'quantity', 'price', 'total', 'user', 'delivery_status')
+    search_fields = ('order__order_no', 'product__product_name', 'user__username')
 
 class RestaurantOrderViewAdmin(admin.ModelAdmin):
     list_display = ('restaurant', 'order')
@@ -28,8 +28,5 @@ class CartAdmin(admin.ModelAdmin):
 
 admin.site.register(Restaurant)
 admin.site.register(Products)
-admin.site.register(Payments, PaymentsAdmin)
-admin.site.register(All_Orders, AllOrdersAdmin)
-admin.site.register(OrderItems, OrderItemsAdmin)
 admin.site.register(RestaurantOrderView, RestaurantOrderViewAdmin)
 admin.site.register(Cart, CartAdmin)
