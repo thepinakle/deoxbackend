@@ -47,7 +47,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',  # Add this line
+    'django.contrib.sessions.middleware.SessionMiddleware', 
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -153,3 +153,10 @@ FRONTEND_URL = 'http://your-frontend-url.com'
 CORS_ALLOW_ALL_ORIGINS = True
 
 BACKEND_URL = 'http://localhost:8000'
+
+# M-Pesa credentials
+MPESA_CONSUMER_KEY = config('MPESA_CONSUMER_KEY')
+MPESA_CONSUMER_SECRET = config('MPESA_CONSUMER_SECRET')
+MPESA_SHORTCODE = config('MPESA_SHORTCODE')
+MPESA_PASSKEY = config('MPESA_PASSKEY')
+MPESA_CALLBACK_URL = config('MPESA_CALLBACK_URL')
