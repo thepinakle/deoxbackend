@@ -32,9 +32,12 @@ def create_order(request):
             room_number = data['room_number']
             phone_number = format_phone_number(data['phone_number'])
 
-            # Initiate M-Pesa payment request
-            transaction_desc = f"Payment for Order"
+            # Generate the transaction description with product names
+            product_names = [item['product_name'] for item in items]
+            transaction_desc = f"Payment for: {', '.join(product_names)}"
             account_reference = f"OrderPayment"
+
+            # Initiate M-Pesa payment request
             response = lipa_na_mpesa_online(phone_number, total_amount, account_reference, transaction_desc)
 
             if 'errorCode' in response:
@@ -119,36 +122,41 @@ def mpesa_payment_request(request):
 
 @csrf_exempt
 def mpesa_callback(request):
-    data = json.loads(request.body)
-    result_code = data['Body']['stkCallback']['ResultCode']
-    if result_code == 0:
-        mpesa_receipt_number = data['Body']['stkCallback']['CallbackMetadata']['Item'][1]['Value']
-        transaction_date = data['Body']['stkCallback']['CallbackMetadata']['Item'][3]['Value']
-        phone_number = data['Body']['stkCallback']['CallbackMetadata']['Item'][4]['Value']
-        payment = Payments.objects.get(mobile=phone_number, payments_status=False)
-        payment.mpesa_receipt_number = mpesa_receipt_number
-        payment.mpesa_transaction_date = datetime.strptime(str(transaction_date), '%Y%m%d%H%M%S')
-        payment.mark_as_paid()
+    try:
+        data = json.loads(request.body)
+        logger.info(f"Callback data: {data}")
+        result_code = data['Body']['stkCallback']['ResultCode']
+        if result_code == 0:
+            mpesa_receipt_number = data['Body']['stkCallback']['CallbackMetadata']['Item'][1]['Value']
+            transaction_date = data['Body']['stkCallback']['CallbackMetadata']['Item'][3]['Value']
+            phone_number = data['Body']['stkCallback']['CallbackMetadata']['Item'][4]['Value']
+            payment = Payments.objects.get(mobile=phone_number, payments_status=False)
+            payment.mpesa_receipt_number = mpesa_receipt_number
+            payment.mpesa_transaction_date = datetime.strptime(str(transaction_date), '%Y%m%d%H%M%S')
+            payment.mark_as_paid()
 
-        # Create the order after successful payment
-        order = All_Orders.objects.create(
-            user=payment.user,
-            mobile=payment.mobile,
-            total=payment.amount,
-            hostel_name=payment.hostel_name,
-            block_number=payment.block_number,
-            room_number=payment.room_number
-        )
-        for item in payment.items:
-            product = Products.objects.get(product_name=item['product_name'], product_price=item['product_price'])
-            OrderItems.objects.create(
-                order=order,
-                product=product,
-                quantity=item['quantity'],
-                price=product.product_price,  # Set the price from the product
-                total=product.product_price * item['quantity'],  # Calculate and set the total
-                user=payment.user,  # Set the user
-                delivery_status='pending'  # Set the default delivery status
+            # Create the order after successful payment
+            order = All_Orders.objects.create(
+                user=payment.user,
+                mobile=payment.mobile,
+                total=payment.amount,
+                hostel_name=payment.hostel_name,
+                block_number=payment.block_number,
+                room_number=payment.room_number
             )
+            for item in payment.items:
+                product = Products.objects.get(product_name=item['product_name'], product_price=item['product_price'])
+                OrderItems.objects.create(
+                    order=order,
+                    product=product,
+                    quantity=item['quantity'],
+                    price=product.product_price,  # Set the price from the product
+                    total=product.product_price * item['quantity'],  # Calculate and set the total
+                    user=payment.user,  # Set the user
+                    delivery_status='pending'  # Set the default delivery status
+                )
 
-    return JsonResponse({"ResultCode": 0, "ResultDesc": "Accepted"})
+        return JsonResponse({"ResultCode": 0, "ResultDesc": "Accepted"})
+    except Exception as e:
+        logger.error(f"Error processing callback: {e}")
+        return JsonResponse({"ResultCode": 1, "ResultDesc": "Failed to process callback"})
