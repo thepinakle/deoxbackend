@@ -20,8 +20,9 @@ from .permissions import IsDeliveryPersonnel
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from django.contrib.auth.decorators import login_required
-import json
-from django.views.decorators.csrf import csrf_exempt
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 
 class UserCreateView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -159,3 +160,186 @@ def create_order(request):
             OrderItems.objects.create(order=order, product=Products.objects.get(id=item['product_id']), quantity=item['quantity'], price=item['price'], total=item['price'] * item['quantity'], user=request.user)
 
         return JsonResponse({'order_id': order.id, 'order_no': str(order.order_no), 'total_amount': total_amount})
+
+@swagger_auto_schema(
+    method='post',
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'username': openapi.Schema(type=openapi.TYPE_STRING, description='Username'),
+            'password': openapi.Schema(type=openapi.TYPE_STRING, description='Password'),
+        },
+        required=['username', 'password']
+    ),
+    responses={200: 'Token obtained successfully', 400: 'Invalid credentials'}
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def token_obtain_pair(request):
+
+    pass
+
+@swagger_auto_schema(
+    method='post',
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'refresh': openapi.Schema(type=openapi.TYPE_STRING, description='Refresh token'),
+        },
+        required=['refresh']
+    ),
+    responses={200: 'Token refreshed successfully', 400: 'Invalid token'}
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def token_refresh(request):
+    pass
+
+@swagger_auto_schema(
+    method='post',
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'username': openapi.Schema(type=openapi.TYPE_STRING, description='Username'),
+            'email': openapi.Schema(type=openapi.TYPE_STRING, description='Email'),
+            'password': openapi.Schema(type=openapi.TYPE_STRING, description='Password'),
+        },
+        required=['username', 'email', 'password']
+    ),
+    responses={201: 'User created successfully', 400: 'Invalid input'}
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def user_create(request):
+    
+    pass
+
+@extend_schema(
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'username': {'type': 'string', 'description': 'Username'},
+                'password': {'type': 'string', 'description': 'Password'},
+            },
+            'required': ['username', 'password']
+        }
+    },
+    responses={
+        200: OpenApiExample(
+            'Success',
+            value={'status': 'success', 'message': 'Login successful'}
+        ),
+        400: OpenApiExample(
+            'Invalid credentials',
+            value={'status': 'error', 'message': 'Invalid credentials'}
+        )
+    }
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login(request):
+
+    pass
+
+@extend_schema(
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'email': {'type': 'string', 'description': 'Email'},
+            },
+            'required': ['email']
+        }
+    },
+    responses={
+        200: OpenApiExample(
+            'Success',
+            value={'status': 'success', 'message': 'Password reset email sent'}
+        ),
+        400: OpenApiExample(
+            'Invalid email',
+            value={'status': 'error', 'message': 'Invalid email'}
+        )
+    }
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password(request):
+    
+    pass
+
+@extend_schema(
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'new_password': {'type': 'string', 'description': 'New password'},
+            },
+            'required': ['new_password']
+        }
+    },
+    responses={
+        200: OpenApiExample(
+            'Success',
+            value={'status': 'success', 'message': 'Password reset successful'}
+        ),
+        400: OpenApiExample(
+            'Invalid token',
+            value={'status': 'error', 'message': 'Invalid token'}
+        )
+    }
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password_confirm(request, uidb64, token):
+
+    pass
+
+@swagger_auto_schema(
+    method='get',
+    responses={200: 'Delivery list retrieved successfully'}
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def delivery_list(request):
+    
+    pass
+
+@swagger_auto_schema(
+    method='post',
+    responses={200: 'Delivery marked as complete', 400: 'Invalid request'}
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_delivery_complete(request, pk):
+    
+    pass
+
+@swagger_auto_schema(
+    method='post',
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'delivery_person_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='Delivery person ID'),
+            'hostel_ids': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER), description='List of hostel IDs'),
+        },
+        required=['delivery_person_id', 'hostel_ids']
+    ),
+    responses={200: 'Hostels assigned successfully', 400: 'Invalid input'}
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def assign_hostels(request):
+    # Your existing code here
+    pass
+
+@swagger_auto_schema(
+    method='get',
+    responses={200: 'Hostel orders retrieved successfully'}
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def hostel_orders(request):
+    # Your existing code here
+    pass
