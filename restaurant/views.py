@@ -1,15 +1,21 @@
 import logging
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
-from .models import All_Orders, OrderItems, Cart, Products, Payments
+from rest_framework.response import Response
+from rest_framework import status
+from .models import All_Orders, OrderItems, Cart, Products, Payments, Restaurant
 from .mpesa import lipa_na_mpesa_online  # Ensure this import is correct
 import json
 from datetime import datetime
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+import uuid
+from .serializers import AllOrdersSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -24,63 +30,102 @@ def format_phone_number(phone_number):
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
         properties={
-            'total_amount': openapi.Schema(type=openapi.TYPE_NUMBER, description='Total amount of the order'),
-            'items': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT), description='List of items in the order'),
-            'hostel_name': openapi.Schema(type=openapi.TYPE_STRING, description='Name of the hostel'),
-            'block_number': openapi.Schema(type=openapi.TYPE_STRING, description='Block number'),
-            'room_number': openapi.Schema(type=openapi.TYPE_STRING, description='Room number'),
-            'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='Phone number'),
+            'product_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='Product ID'),
+            'quantity': openapi.Schema(type=openapi.TYPE_INTEGER, description='Quantity'),
         },
-        required=['total_amount', 'items', 'hostel_name', 'block_number', 'room_number', 'phone_number']
+        required=['product_id', 'quantity']
     ),
-    responses={200: 'Order created successfully', 400: 'Invalid input'}
+    responses={200: 'Item added to cart', 400: 'Invalid input'}
 )
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def add_to_cart(request):
+    try:
+        data = json.loads(request.body)
+        product_id = data['product_id']
+        quantity = data['quantity']
+
+        product = get_object_or_404(Products, id=product_id)
+        cart_item, created = Cart.objects.get_or_create(user=request.user, product=product)
+        if not created:
+            cart_item.quantity += quantity
+        else:
+            cart_item.quantity = quantity
+        cart_item.save()
+
+        return JsonResponse({'message': 'Item added to cart', 'cart_item_id': cart_item.id})
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON payload")
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+    except KeyError as e:
+        logger.error(f"Missing key in request payload: {e}")
+        return JsonResponse({'error': f"Missing key: {e}"}, status=400)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def create_order(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            logger.info(f"Request data: {data}")
-            total_amount = data['total_amount']
-            items = data['items']
-            hostel_name = data['hostel_name']
-            block_number = data['block_number']
-            room_number = data['room_number']
-            phone_number = format_phone_number(data['phone_number'])
+    try:
+        data = json.loads(request.body)
+        logger.info(f"Request payload: {data}")
+        
+        hostel_name = data['hostel_name']
+        block_number = data['block_number']
+        room_number = data['room_number']
+        phone_number = format_phone_number(data['phone_number'])
 
-            # Generate the transaction description with product names
-            product_names = [item['product_name'] for item in items]
-            transaction_desc = f"Payment for: {', '.join(product_names)}"
-            account_reference = f"OrderPayment"
+        cart_items = Cart.objects.filter(user=request.user)
+        if not cart_items.exists():
+            return JsonResponse({'error': 'Cart is empty'}, status=400)
 
-            # Initiate M-Pesa payment request
-            response = lipa_na_mpesa_online(phone_number, total_amount, account_reference, transaction_desc)
+        total_amount = sum(item.total for item in cart_items)
 
-            if 'errorCode' in response:
-                logger.error(f"M-Pesa error: {response['errorMessage']}")
-                return JsonResponse({'error': response['errorMessage'], 'mpesa_response': response}, status=400)
+        # Generate a unique order number
+        order_no = f"ORD-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
 
-            # Save payment details for callback verification
-            Payments.objects.create(
-                user=request.user,
-                mobile=phone_number,
-                amount=total_amount,
-                payments_status=False,
-                mpesa_receipt_number='',
-                mpesa_transaction_date=None
-            )
+        order = All_Orders.objects.create(
+            user=request.user,
+            total=total_amount,
+            hostel_name=hostel_name,
+            block_number=block_number,
+            room_number=room_number,
+            mobile=phone_number,
+            order_no=order_no  # Set the generated order number
+        )
 
-            return JsonResponse({'message': 'Payment initiated successfully. Please complete the payment on your phone.', 'mpesa_response': response})
-        except json.JSONDecodeError:
-            logger.error("Invalid JSON payload")
-            return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
-        except KeyError as e:
-            logger.error(f"Missing key in request data: {e}")
-            return JsonResponse({'error': f"Missing key in request data: {e}"}, status=400)
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+        for item in cart_items:
+            OrderItems.objects.create(order=order, product=item.product, quantity=item.quantity, price=item.price)
+            item.delete()  # Remove item from cart after adding to order
+
+        # Initiate M-Pesa payment
+        transaction_desc = f"Payment for order {order.order_no}"
+        account_reference = f"Order {order.order_no}"
+        response = lipa_na_mpesa_online(phone_number, total_amount, account_reference, transaction_desc)
+
+        if 'errorCode' in response:
+            return JsonResponse({'error': response['errorMessage'], 'mpesa_response': response}, status=400)
+
+        Payments.objects.create(
+            user=request.user,
+            mobile=phone_number,
+            amount=total_amount,
+            payments_status=False,
+            mpesa_receipt_number='',
+            mpesa_transaction_date=None
+        )
+
+        return JsonResponse({'message': 'Order created and payment initiated', 'order_id': order.id, 'mpesa_response': response})
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON payload")
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+    except KeyError as e:
+        logger.error(f"Missing key in request payload: {e}")
+        return JsonResponse({'error': f"Missing key: {e}"}, status=400)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 @swagger_auto_schema(
     method='post',
@@ -105,36 +150,6 @@ def list_orders(request):
     return JsonResponse({'orders': orders_data})
 
 @swagger_auto_schema(
-    method='post',
-    request_body=openapi.Schema(
-        type=openapi.TYPE_OBJECT,
-        properties={
-            'item_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='Item ID'),
-            'quantity': openapi.Schema(type=openapi.TYPE_INTEGER, description='Quantity'),
-        },
-        required=['item_id', 'quantity']
-    ),
-    responses={200: 'Item added to cart', 400: 'Invalid input'}
-)
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def add_to_cart(request):
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        product_id = data['product_id']
-        quantity = data['quantity']
-
-        product = Products.objects.get(id=product_id)
-        cart_item, created = Cart.objects.get_or_create(user=request.user, product=product)
-        if not created:
-            cart_item.quantity += quantity
-        else:
-            cart_item.quantity = quantity
-        cart_item.save()
-
-        return JsonResponse({'message': 'Item added to cart', 'cart_item_id': cart_item.id})
-
-@swagger_auto_schema(
     method='get',
     responses={200: 'Cart retrieved successfully'}
 )
@@ -142,8 +157,22 @@ def add_to_cart(request):
 @permission_classes([IsAuthenticated])
 def view_cart(request):
     cart_items = Cart.objects.filter(user=request.user)
-    cart_data = [{'product_name': item.product.product_name, 'quantity': item.quantity, 'price': item.price, 'total': item.total} for item in cart_items]
+    cart_data = [{
+        'id': item.id,
+        'product_name': item.product.product_name,
+        'quantity': item.quantity,
+        'price': item.price,
+        'total': item.total,
+        'image': item.product.product_image.url  # Include the image URL if applicable
+    } for item in cart_items]
     return JsonResponse({'cart': cart_data})
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def remove_from_cart(request, item_id):
+    cart_item = get_object_or_404(Cart, id=item_id, user=request.user)
+    cart_item.delete()
+    return JsonResponse({'status': 'success', 'message': 'Item removed from cart'})
 
 @csrf_exempt
 @extend_schema(
@@ -225,3 +254,23 @@ def mpesa_callback(request):
         data = json.loads(request.body)
         # Your existing code here
         pass
+
+def restaurant_list(request):
+    restaurants = Restaurant.objects.all()
+    return render(request, 'restaurant_list.html', {'restaurants': restaurants})
+
+def restaurant_detail(request, restaurant_id):
+    restaurant = get_object_or_404(Restaurant, id=restaurant_id)
+    products = Products.objects.filter(restaurant=restaurant)
+    return render(request, 'restaurant_detail.html', {'restaurant': restaurant, 'products': products})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_orders_by_restaurant(request, restaurant_id):
+    if not request.user.is_staff:
+        return Response({'detail': 'You do not have permission to perform this action.'}, status=status.HTTP_403_FORBIDDEN)
+    
+    restaurant = get_object_or_404(Restaurant, id=restaurant_id)
+    orders = All_Orders.objects.filter(restaurant=restaurant)
+    serializer = AllOrdersSerializer(orders, many=True)
+    return Response(serializer.data)
