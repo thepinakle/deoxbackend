@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Hostel, Team, Profile  # Removed Delivery
+from .models import Hostel, Team, Profile
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
@@ -20,6 +20,11 @@ class HostelAdmin(admin.ModelAdmin):
 
 @admin.register(Team)
 class TeamAdmin(admin.ModelAdmin):
-    list_display = ('name', 'occupation', 'assigned_hostel')
-    search_fields = ('name', 'occupation')
-    list_filter = ('name',)
+    list_display = ('name', 'occupation', 'assigned_hostel', 'user', 'status', 'order')
+    search_fields = ('name', 'occupation', 'assigned_hostel__name', 'user__username', 'order__order_no')
+    list_filter = ('status', 'assigned_hostel__block')
+    fieldsets = (
+        (None, {
+            'fields': ('profile_image', 'occupation', 'name', 'assigned_hostel', 'user', 'status', 'order')
+        }),
+    )

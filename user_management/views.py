@@ -1,8 +1,8 @@
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.contrib.auth.tokens import default_token_generator
-from django.utils.http import urlsafe_base64_decode
-from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.encoding import force_str, force_bytes
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth import login
@@ -13,9 +13,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import Delivery, Hostel, Profile
+from .models import Delivery, Hostel, Profile, Team
 from restaurant.models import All_Orders, OrderItems, Cart, Products  # Correct import
-from .serializers import UserSerializer, ResetPasswordSerializer, DeliverySerializer
+from .serializers import UserSerializer, ResetPasswordSerializer, DeliverySerializer, OrderSerializer, PasswordResetSerializer, SetNewPasswordSerializer
 from .permissions import IsDeliveryPersonnel
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
@@ -23,6 +23,8 @@ from django.contrib.auth.decorators import login_required
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from django.shortcuts import get_object_or_404
+from django.template.loader import render_to_string
 
 class UserCreateView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -341,5 +343,60 @@ def assign_hostels(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def hostel_orders(request):
-    # Your existing code here
     pass
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_orders_by_hostel_block(request):
+    user = request.user
+    team_member = Team.objects.get(user=user)
+    hostel_block_number = team_member.assigned_hostel.block
+    orders = All_Orders.objects.filter(block_number=hostel_block_number)
+    return render(request, 'orders_by_hostel_block.html', {'orders': orders, 'team_member': team_member})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_orders_by_team_member(request):
+    user = request.user
+    team_member = get_object_or_404(Team, user=user)
+    hostel_block_number = team_member.assigned_hostel.block
+    orders = All_Orders.objects.filter(block_number=hostel_block_number)
+    serializer = OrderSerializer(orders, many=True)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_request(request):
+    serializer = PasswordResetSerializer(data=request.data)
+    if serializer.is_valid():
+        email = serializer.validated_data['email']
+        users = User.objects.filter(email=email)
+        if users.exists():
+            for user in users:
+                token = default_token_generator.make_token(user)
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                reset_link = f"{settings.FRONTEND_URL}/reset-password-confirm/{uid}/{token}/"
+                mail_subject = 'Password Reset Request'
+                message = f"Hi {user.username},\n\nYou requested a password reset. Click the link below to reset your password:\n{reset_link}\n\nIf you did not request this, please ignore this email."
+                send_mail(mail_subject, message, settings.EMAIL_HOST_USER, [user.email])
+            return Response({'message': 'Password reset link has been sent to your email.'}, status=status.HTTP_200_OK)
+        return Response({'message': 'No user found with this email address.'}, status=status.HTTP_404_NOT_FOUND)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_confirm(request, uidb64, token):
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    if user is not None and default_token_generator.check_token(user, token):
+        serializer = SetNewPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            return Response({'message': 'Password has been reset successfully.'}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': 'Invalid token or user ID.'}, status=status.HTTP_400_BAD_REQUEST)

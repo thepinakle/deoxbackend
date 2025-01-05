@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.apps import apps
 
 class Hostel(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -13,10 +14,11 @@ class Team(models.Model):
     profile_image = models.ImageField(upload_to='images/')
     occupation = models.CharField(max_length=100)
     name = models.CharField(max_length=200)
-    assigned_hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name='user_management_team_set')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_management_team_set')
+    assigned_hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, related_name='team_set')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='team_set')
     status = models.CharField(max_length=10, choices=[('pending', 'Pending'), ('complete', 'Complete')], default='pending')
-    order = models.ForeignKey('restaurant.All_Orders', on_delete=models.CASCADE, related_name='user_management_team_set', default=1)  # Provide a suitable default value
+    order = models.ForeignKey('restaurant.All_Orders', on_delete=models.CASCADE, related_name='team_set', default=1)
+    restaurant = models.ForeignKey('restaurant.Restaurant', on_delete=models.CASCADE, related_name='team_set', default=1)  # Provide a suitable default value
 
     def __str__(self):
         return f"{self.name} ({self.occupation}) - Assigned to {self.assigned_hostel.name}"

@@ -5,8 +5,10 @@ from phonenumber_field.modelfields import PhoneNumberField
 from user_management.models import Hostel  # Import the Hostel model
 
 class Restaurant(models.Model):
-    name = models.CharField(max_length=255)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    description = models.TextField(default='Default description')  # Add default value
+    picture = models.ImageField(upload_to='restaurant_pictures/', null=True, blank=True)  # Add picture field
+    location = models.CharField(max_length=255, default='Default location')  # Add default value
 
     def __str__(self):
         return self.name
@@ -14,7 +16,7 @@ class Restaurant(models.Model):
 class Products(models.Model):
     product_image = models.ImageField(upload_to="images/")
     product_name = models.CharField(max_length=30)
-    product_price = models.DecimalField(max_digits=10, decimal_places=2)  
+    product_price = models.DecimalField(max_digits=10, decimal_places=2)
     category = models.CharField(max_length=30)
     description = models.TextField(max_length=200)
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE)
@@ -32,8 +34,8 @@ class Cart(models.Model):
     date_added = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = 'cart'
-        verbose_name_plural = 'carts'
+        verbose_name = 'Cart'
+        verbose_name_plural = 'Carts'
 
     def save(self, *args, **kwargs):
         self.price = self.product.product_price  # Fetch price from Products model
@@ -41,17 +43,26 @@ class Cart(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Cart for {self.user.username}"
+        return f"{self.quantity} x {self.product.product_name} in cart of {self.user.username}"
 
 class All_Orders(models.Model):
+    STATUS_CHOICES = [
+        ('picked', 'Picked'),
+        ('packed', 'Packed'),
+        ('on_transit', 'On Transit'),
+        ('complete', 'Complete'),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     mobile = PhoneNumberField(null=False, blank=False)
-    hostel_name = models.CharField(max_length=100, default="Unknown Hostel")
-    block_number = models.CharField(max_length=100, blank=True, null=True, default="Unknown Block")
-    room_number = models.CharField(max_length=100, default="Unknown Room")
+    hostel_name = models.CharField(max_length=100)
+    block_number = models.CharField(max_length=100, default='N/A')  # Provide a default value
+    room_number = models.CharField(max_length=100)
     date = models.DateTimeField(auto_now_add=True)
-    order_no = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    order_no = models.CharField(max_length=100, unique=True, editable=False)  # Make order_no unique and non-editable
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    delivery_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='picked')  # Add delivery status field
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='orders', default=1)  # Provide a suitable default value
 
     def __str__(self):
         return f"Order #{self.order_no} for {self.user.username}"
@@ -60,40 +71,14 @@ class OrderItems(models.Model):
     order = models.ForeignKey(All_Orders, on_delete=models.CASCADE)
     product = models.ForeignKey(Products, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
-    price = models.DecimalField(max_digits=10, decimal_places=2)  # Ensure this field is included
-    total = models.DecimalField(max_digits=10, decimal_places=2)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)  # Add the user field
-    delivery_status = models.CharField(max_length=20, default='pending')  # Add delivery_status with default value
+    price = models.DecimalField(max_digits=10, decimal_places=2)
 
-    def save(self, *args, **kwargs):
-        self.price = self.product.product_price  # Fetch price from Products model
-        self.total = self.price * self.quantity  # Calculate total
-        super().save(*args, **kwargs)
+    @property
+    def total(self):
+        return self.quantity * self.price
 
     def __str__(self):
-        return f"Order Item: {self.product.product_name} (x{self.quantity})"
-
-    def generate_delivery_code(self):
-        """Generate a random delivery code."""
-        if not self.delivery_code:
-            self.delivery_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-            self.save()
-        return self.delivery_code
-
-    def mark_as_packed(self):
-        self.status = 'packed'
-        self.save()
-
-    def mark_as_picked(self):
-        self.status = 'picked'
-        self.save()
-
-    def mark_as_delivered(self, user_code):
-        if user_code == self.delivery_code:
-            self.status = 'delivered'
-            self.save()
-        else:
-            raise ValueError("Invalid delivery code.")
+        return f"{self.quantity} x {self.product.product_name}"
 
 class Payments(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -111,12 +96,12 @@ class Payments(models.Model):
         return f"Payment for {self.user.username} - {self.amount}"
 
 class RestaurantOrderView(models.Model):
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE)
-    order = models.ForeignKey(All_Orders, on_delete=models.CASCADE)
-    ordered_products = models.ManyToManyField(OrderItems)
+    order = models.ForeignKey('All_Orders', on_delete=models.CASCADE)
+    restaurant = models.ForeignKey('Restaurant', on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, default='pending')  # Provide a default value
 
     def __str__(self):
-        return f"Order #{self.order.order_no} for {self.restaurant.name}"
+        return f"Order {self.order.id} for {self.restaurant.name}"
 
 class Team(models.Model):
     profile_image = models.ImageField(upload_to='images/')

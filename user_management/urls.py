@@ -1,6 +1,6 @@
-from django.urls import path, include
+from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from .views import UserCreateView, ResetPasswordView, password_reset_confirm, LoginView, DeliveryListView, MarkDeliveryCompleteView, assign_hostels_to_delivery_personnel, hostel_orders
+from .views import UserCreateView, ResetPasswordView, password_reset_confirm, LoginView, DeliveryListView, MarkDeliveryCompleteView, assign_hostels_to_delivery_personnel, hostel_orders, list_orders_by_hostel_block, list_orders_by_team_member
 
 urlpatterns = [
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
@@ -12,5 +12,7 @@ urlpatterns = [
     path('deliveries/', DeliveryListView.as_view(), name='delivery_list'),
     path('mark-delivery-complete/<int:pk>/', MarkDeliveryCompleteView.as_view(), name='mark_delivery_complete'),
     path('assign-hostels/', assign_hostels_to_delivery_personnel, name='assign_hostels_to_delivery_personnel'),
-    path('hostel-orders/', hostel_orders, name='hostel_orders'),  # New URL pattern
+    path('hostel-orders/', hostel_orders, name='hostel_orders'),
+    path('orders_by_hostel_block/', list_orders_by_hostel_block, name='orders_by_hostel_block'),
+    path('orders_by_team_member/', list_orders_by_team_member, name='orders_by_team_member'),
 ]

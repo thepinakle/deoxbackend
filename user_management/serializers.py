@@ -4,6 +4,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from django.conf import settings
 from .models import Delivery
+from restaurant.models import All_Orders
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -42,7 +43,29 @@ class ResetPasswordSerializer(serializers.Serializer):
             fail_silently=False,
         )
 
+class PasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+class SetNewPasswordSerializer(serializers.Serializer):
+    new_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data['new_password'] != data['confirm_password']:
+            raise serializers.ValidationError("Passwords do not match.")
+        return data
+
 class DeliverySerializer(serializers.ModelSerializer):
     class Meta:
         model = Delivery
         fields = '__all__'
+
+class OrderSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.username')
+    hostel_name = serializers.CharField(source='hostel_name')
+    block_number = serializers.CharField(source='block_number')
+    room_number = serializers.CharField(source='room_number')
+
+    class Meta:
+        model = All_Orders
+        fields = ['id', 'user_name', 'hostel_name', 'block_number', 'room_number', 'order_no', 'total', 'delivery_status']
