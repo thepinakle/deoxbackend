@@ -7,3 +7,20 @@ class AllOrdersSerializer(serializers.ModelSerializer):
     class Meta:
         model = All_Orders
         fields = ['id', 'user', 'mobile', 'hostel_name', 'block_number', 'room_number', 'date', 'order_no', 'total', 'delivery_status', 'restaurant_name']
+
+from rest_framework import serializers
+from .models import Restaurant
+
+class RestaurantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Restaurant
+        fields = ['id', 'name', 'description', 'location', 'picture']
+
+
+
+from .models import Products
+
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Products
+        fields = ['id', 'product_name', 'product_price', 'category', 'description', 'product_image']

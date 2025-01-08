@@ -16,6 +16,10 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import uuid
 from .serializers import AllOrdersSerializer
+from rest_framework import serializers
+from .models import Restaurant, Products
+from .serializers import RestaurantSerializer, ProductSerializer
+
 
 logger = logging.getLogger(__name__)
 
@@ -266,11 +270,325 @@ def restaurant_detail(request, restaurant_id):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def list_orders_by_restaurant(request, restaurant_id):
+def list_orders_by_restaurant(request, restaurant_name):
     if not request.user.is_staff:
         return Response({'detail': 'You do not have permission to perform this action.'}, status=status.HTTP_403_FORBIDDEN)
-    
-    restaurant = get_object_or_404(Restaurant, id=restaurant_id)
+
+    restaurant = get_object_or_404(Restaurant, name=restaurant_name)
     orders = All_Orders.objects.filter(restaurant=restaurant)
     serializer = AllOrdersSerializer(orders, many=True)
     return Response(serializer.data)
+
+
+@swagger_auto_schema(
+    method='get',
+    operation_description="Retrieve a list of all restaurants along with their associated products.",
+    responses={
+        200: openapi.Response(
+            description="A list of restaurants with details and products.",
+            examples={
+                "application/json": [
+                    {
+                        "id": 1,
+                        "name": "Restaurant A",
+                        "description": "Best restaurant in town",
+                        "location": "123 Main Street",
+                        "picture": "http://example.com/media/restaurant_pictures/restaurant_a.jpg",
+                        "products": [
+                            {
+                                "id": 1,
+                                "product_name": "Pizza",
+                                "product_price": "10.99",
+                                "category": "Food",
+                                "description": "Delicious cheese pizza",
+                                "product_image": "http://example.com/media/images/pizza.jpg"
+                            },
+                            {
+                                "id": 2,
+                                "product_name": "Burger",
+                                "product_price": "8.99",
+                                "category": "Food",
+                                "description": "Juicy beef burger",
+                                "product_image": "http://example.com/media/images/burger.jpg"
+                            }
+                        ]
+                    },
+                    {
+                        "id": 2,
+                        "name": "Restaurant B",
+                        "description": "Fine dining experience",
+                        "location": "456 Elm Street",
+                        "picture": None,
+                        "products": []
+                    }
+                ]
+            }
+        ),
+    },
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])  # Public access
+def api_restaurant_list(request):
+    restaurants = Restaurant.objects.all()
+    data = []
+
+    for restaurant in restaurants:
+        products = Products.objects.filter(restaurant=restaurant)
+        serialized_products = ProductSerializer(products, many=True).data
+        data.append({
+            'id': restaurant.id,
+            'name': restaurant.name,
+            'description': restaurant.description,
+            'location': restaurant.location,
+            'picture': restaurant.picture.url if restaurant.picture else None,
+            'products': serialized_products,
+        })
+
+    return Response(data)
+
+
+
+@swagger_auto_schema(
+    method='get',
+    operation_description="Retrieve products filtered by category.",
+    responses={
+        200: openapi.Response(
+            description="List of products in the given category.",
+            schema=ProductSerializer(many=True)
+        ),
+        404: openapi.Response(
+            description="No products found in the specified category."
+        ),
+    },
+    manual_parameters=[
+        openapi.Parameter(
+            'category',
+            openapi.IN_PATH,
+            description="The category to filter products by.",
+            type=openapi.TYPE_STRING,
+        )
+    ],
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_products_by_category(request, category):
+    products = Products.objects.filter(category__iexact=category)
+    if products.exists():
+        serialized_products = ProductSerializer(products, many=True).data
+        return Response({
+            'category': category,
+            'products': serialized_products
+        }, status=200)
+    else:
+        return Response({
+            'message': f"No products found in category '{category}'.",
+            'category': category
+        }, status=404)
+    
+
+
+@api_view(['GET'])
+def api_categories(request):
+    categories = Products.objects.values_list('category', flat=True).distinct()
+    return Response({"categories": list(categories)})
+
+
+
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from restaurant.models import All_Orders
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+@swagger_auto_schema(
+    method='get',
+    operation_summary="View orders for the authenticated user",
+    operation_description="Retrieve all orders associated with the currently authenticated user.",
+    responses={
+        200: openapi.Response(
+            description="A list of orders for the authenticated user",
+            examples={
+                "application/json": [
+                    {
+                        "order_no": "ORD12345",
+                        "total": "29.99",
+                        "date": "2025-01-08T12:34:56",
+                        "delivery_status": "on_transit",
+                        "restaurant": {
+                            "id": 1,
+                            "name": "Restaurant A"
+                        },
+                        "items": [
+                            {
+                                "product_name": "Burger",
+                                "quantity": 2,
+                                "price": "5.99",
+                                "total": "11.98"
+                            },
+                            {
+                                "product_name": "Fries",
+                                "quantity": 1,
+                                "price": "3.99",
+                                "total": "3.99"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ),
+        401: openapi.Response(
+            description="Unauthorized access",
+            examples={"application/json": {"error": "Authentication credentials were not provided."}}
+        )
+    }
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_view_orders(request):
+    """
+    View orders for the authenticated user.
+    """
+    user = request.user
+    orders = All_Orders.objects.filter(user=user)
+
+    if not orders:
+        return Response({"error": "No orders found for this user."}, status=status.HTTP_404_NOT_FOUND)
+
+    order_data = []
+    for order in orders:
+        order_items = []
+        for order_item in order.orderitems_set.all():
+            order_items.append({
+                "product_name": order_item.product.product_name,
+                "quantity": order_item.quantity,
+                "price": str(order_item.price),
+                "total": str(order_item.total)
+            })
+        
+        order_data.append({
+            "order_no": order.order_no,
+            "total": str(order.total),
+            "date": order.date,
+            "delivery_status": order.delivery_status,
+            "restaurant": {
+                "id": order.restaurant.id,
+                "name": order.restaurant.name
+            },
+            "items": order_items
+        })
+
+    return Response(order_data)
+
+@swagger_auto_schema(
+    method='get',
+    operation_summary="View all products",
+    operation_description="Retrieve a list of all products available in the system.",
+    responses={
+        200: openapi.Response(
+            description="A list of products",
+            examples={
+                "application/json": [
+                    {
+                        "id": 1,
+                        "product_name": "Burger",
+                        "product_price": "5.99",
+                        "category": "Food",
+                        "description": "Delicious beef burger",
+                        "restaurant": {
+                            "id": 1,
+                            "name": "Restaurant A"
+                        },
+                        "product_image": "http://example.com/path/to/image.jpg"
+                    },
+                    {
+                        "id": 2,
+                        "product_name": "Fries",
+                        "product_price": "3.99",
+                        "category": "Food",
+                        "description": "Crispy fries",
+                        "restaurant": {
+                            "id": 1,
+                            "name": "Restaurant A"
+                        },
+                        "product_image": "http://example.com/path/to/image2.jpg"
+                    }
+                ]
+            }
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={"application/json": {"error": "Invalid request."}}
+        )
+    }
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_view_products(request):
+    """
+    View all products in the system.
+    """
+    products = Products.objects.all()
+
+    if not products:
+        return Response({"error": "No products found."}, status=status.HTTP_404_NOT_FOUND)
+
+    serialized_products = ProductSerializer(products, many=True).data
+
+    return Response(serialized_products)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])  # Public access, change if authentication is required
+def api_products_by_restaurant(request, restaurant_id):
+    """
+    View to list products of a specific restaurant by restaurant ID
+    """
+    try:
+        # Filter products based on the restaurant id
+        products = Products.objects.filter(restaurant__id=restaurant_id)
+
+        # Serialize the filtered products
+        serialized_products = ProductSerializer(products, many=True)
+
+        # Return the serialized data
+        return Response(serialized_products.data)
+
+    except Products.DoesNotExist:
+        # Handle the case where the restaurant has no products
+        return Response({"detail": "Products not found for this restaurant"}, status=404)
+
+@api_view(['PUT'])
+@permission_classes([IsAdminUser])
+def update_order_delivery_status(request, order_id):
+    """
+    View for admins to update the delivery status and remove completed orders
+    """
+    try:
+
+        order = All_Orders.objects.get(id=order_id)
+        new_status = request.data.get('delivery_status')
+
+        if new_status:
+            order.delivery_status = new_status
+            order.save()
+            if new_status == 'complete':
+                order.delete()
+
+            return Response({
+                'message': 'Delivery status updated successfully',
+                'order': AllOrdersSerializer(order).data
+            }, status=status.HTTP_200_OK)
+
+        return Response({"detail": "Delivery status not provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+    except All_Orders.DoesNotExist:
+        raise NotFound(detail="Order not found")
+    
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def api_all_orders(request):
+    orders = All_Orders.objects.all()
+    serialized_orders = AllOrdersSerializer(orders, many=True)
+    return Response(serialized_orders.data)
