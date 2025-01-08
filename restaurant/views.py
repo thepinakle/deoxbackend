@@ -19,6 +19,7 @@ from .serializers import AllOrdersSerializer
 from rest_framework import serializers
 from .models import Restaurant, Products
 from .serializers import RestaurantSerializer, ProductSerializer
+from rest_framework.permissions import IsAdminUser
 
 
 logger = logging.getLogger(__name__)
@@ -538,9 +539,15 @@ def api_view_products(request):
 
     return Response(serialized_products)
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .models import Products
+from .serializers import ProductSerializer
+
 @api_view(['GET'])
-@permission_classes([AllowAny])  # Public access, change if authentication is required
-def api_products_by_restaurant(request, restaurant_id):
+@permission_classes([IsAuthenticated])
+def api_products_by_restaurant_view(request, restaurant_id):
     """
     View to list products of a specific restaurant by restaurant ID
     """
@@ -557,6 +564,7 @@ def api_products_by_restaurant(request, restaurant_id):
     except Products.DoesNotExist:
         # Handle the case where the restaurant has no products
         return Response({"detail": "Products not found for this restaurant"}, status=404)
+
 
 @api_view(['PUT'])
 @permission_classes([IsAdminUser])
