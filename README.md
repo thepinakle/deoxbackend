@@ -7,3 +7,4 @@ pip install  -r requirements.txt
 source venv/bin/activate 
 4.Runserver 
 python3 manage.py runserver 
+
