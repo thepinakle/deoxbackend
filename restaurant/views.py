@@ -20,6 +20,24 @@ from rest_framework import serializers
 from .models import Restaurant, Products
 from .serializers import RestaurantSerializer, ProductSerializer
 from rest_framework.permissions import IsAdminUser
+from decimal import Decimal
+from .utils import calculate_delivery_fee
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from .models import Cart
+import time
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from django.http import JsonResponse
+from django.utils import timezone
+import json
+from datetime import datetime
+from rest_framework import permissions
+
+ # Import the delivery fee function
+
 
 
 logger = logging.getLogger(__name__)
@@ -68,11 +86,61 @@ def add_to_cart(request):
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+    
+
+
+
+ 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_delivery_fee(request):
+    try:
+        # Retrieve the items in the user's cart
+        cart_items = Cart.objects.filter(user=request.user)
+        if not cart_items.exists():
+            return JsonResponse({'error': 'Cart is empty'}, status=400)
+
+        # Calculate the total price of the items in the cart
+        total_price = sum(item.quantity * item.product.price for item in cart_items)
+
+        # Calculate the delivery fee based on the total price
+        delivery_fee = calculate_delivery_fee(total_price)
+
+        return JsonResponse({
+            'message': 'Delivery fee calculated successfully',
+            'total_price': total_price,
+            'delivery_fee': delivery_fee
+        })
+
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+
+@csrf_exempt
+@swagger_auto_schema(
+    method='post',
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'hostel_name': openapi.Schema(type=openapi.TYPE_STRING, description='Hostel name'),
+            'block_number': openapi.Schema(type=openapi.TYPE_STRING, description='Block number'),
+            'room_number': openapi.Schema(type=openapi.TYPE_STRING, description='Room number'),
+            'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='Phone number')
+        },
+        required=['hostel_name', 'block_number', 'room_number', 'phone_number']
+    ),
+    responses={200: 'Order created and payment initiated', 400: 'Invalid input'}
+)
+
+  # Importing the utility function
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_order(request):
     try:
+        # Parse incoming request data
         data = json.loads(request.body)
         logger.info(f"Request payload: {data}")
         
@@ -81,47 +149,101 @@ def create_order(request):
         room_number = data['room_number']
         phone_number = format_phone_number(data['phone_number'])
 
+        # Retrieve cart items for the current user
         cart_items = Cart.objects.filter(user=request.user)
         if not cart_items.exists():
             return JsonResponse({'error': 'Cart is empty'}, status=400)
 
-        total_amount = sum(item.total for item in cart_items)
+        # Ensure total_amount is a float (or str if you prefer)
+        total_amount = sum(float(item.total) for item in cart_items)  # Convert Decimal to float
+
+        # Calculate delivery fee based on total amount of ordered items
+        def calculate_delivery_fee(total_amount):
+            if total_amount < 75:
+                return 11
+            elif 75 <= total_amount <= 150:
+                return 21
+            elif 151 <= total_amount <= 200:
+                return 31
+            elif 201 <= total_amount <= 300:
+                return 36
+            elif 301 <= total_amount <= 400:
+                return 51
+            elif 401 <= total_amount <= 500:
+                return 55
+            elif 501 <= total_amount <= 600:
+                return 60
+            else:  # for amounts above 600
+                return 70
+
+        # Calculate the delivery fee and total amount with delivery
+        delivery_fee = calculate_delivery_fee(total_amount)
+        total_amount_with_delivery = total_amount + delivery_fee
 
         # Generate a unique order number
         order_no = f"ORD-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
 
+        # Initiate M-Pesa payment and get the response
+        transaction_desc = f"Payment for order {order_no}"
+        account_reference = f"Order {order_no}"
+        mpesa_response = lipa_na_mpesa_online(phone_number, total_amount_with_delivery, account_reference, transaction_desc)
+
+        # Check if the M-Pesa response contains an error code or lacks a transaction code
+        if 'errorCode' in mpesa_response:
+            return JsonResponse({'error': mpesa_response['errorMessage'], 'mpesa_response': mpesa_response}, status=400)
+
+        # Extract M-Pesa transaction code from the response (assuming it's present)
+        mpesa_transaction_code = mpesa_response.get('transactionCode', None)
+
+        # If no transaction code, wait for 30 seconds before retrying
+        if not mpesa_transaction_code:
+            # Wait for 30 seconds
+            time.sleep(30)
+
+            # Retry the transaction to fetch the transaction code (you may want to implement this as a loop)
+            mpesa_response = lipa_na_mpesa_online(phone_number, total_amount_with_delivery, account_reference, transaction_desc)
+            mpesa_transaction_code = mpesa_response.get('transactionCode', None)
+
+            # If the transaction code is still not found after 30 seconds, return an error
+            if not mpesa_transaction_code:
+                return JsonResponse({'error': 'Payment failed, no transaction code received after waiting 30 seconds'}, status=400)
+
+        # Proceed to create the order since the transaction code is received
         order = All_Orders.objects.create(
             user=request.user,
-            total=total_amount,
+            total=total_amount_with_delivery,  # Store total amount with delivery fee
             hostel_name=hostel_name,
             block_number=block_number,
             room_number=room_number,
             mobile=phone_number,
-            order_no=order_no  # Set the generated order number
+            order_no=order_no,
+            mpesa_transaction_code=mpesa_transaction_code  # Store the M-Pesa transaction code
         )
 
+        # Create order items
         for item in cart_items:
-            OrderItems.objects.create(order=order, product=item.product, quantity=item.quantity, price=item.price)
+            OrderItems.objects.create(order=order, product=item.product, quantity=item.quantity, price=float(item.price))  # Convert Decimal to float
             item.delete()  # Remove item from cart after adding to order
 
-        # Initiate M-Pesa payment
-        transaction_desc = f"Payment for order {order.order_no}"
-        account_reference = f"Order {order.order_no}"
-        response = lipa_na_mpesa_online(phone_number, total_amount, account_reference, transaction_desc)
-
-        if 'errorCode' in response:
-            return JsonResponse({'error': response['errorMessage'], 'mpesa_response': response}, status=400)
-
+        # Create a payment record (assuming payment status is initially 'False' until confirmed)
         Payments.objects.create(
             user=request.user,
             mobile=phone_number,
-            amount=total_amount,
+            amount=total_amount_with_delivery,  # Include the delivery fee in the payment
             payments_status=False,
             mpesa_receipt_number='',
             mpesa_transaction_date=None
         )
 
-        return JsonResponse({'message': 'Order created and payment initiated', 'order_id': order.id, 'mpesa_response': response})
+        # Return response with the created order details
+        return JsonResponse({
+            'message': 'Order created and payment initiated successfully',
+            'order_id': order.id,
+            'order_no': order.order_no,
+            'mpesa_transaction_code': mpesa_transaction_code,
+            'total_amount_with_delivery': total_amount_with_delivery
+        })
+
     except json.JSONDecodeError:
         logger.error("Invalid JSON payload")
         return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
@@ -131,21 +253,6 @@ def create_order(request):
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
-
-@swagger_auto_schema(
-    method='post',
-    responses={200: 'Delivery marked as complete', 400: 'Invalid request'}
-)
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def mark_delivery_complete(request, pk):
-    try:
-        order = All_Orders.objects.get(pk=pk)
-        order.status = 'complete'
-        order.save()
-        return JsonResponse({"detail": "Delivery marked as complete."}, status=200)
-    except All_Orders.DoesNotExist:
-        return JsonResponse({"detail": "Order not found."}, status=404)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

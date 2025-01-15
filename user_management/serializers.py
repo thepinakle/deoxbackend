@@ -69,3 +69,14 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = All_Orders
         fields = ['id', 'user_name', 'hostel_name', 'block_number', 'room_number', 'order_no', 'total', 'delivery_status']
+
+
+
+from rest_framework import serializers
+from django.contrib.auth.models import User
+
+# Serializer to expose username and email
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['username', 'email']

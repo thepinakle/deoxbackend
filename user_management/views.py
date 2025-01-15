@@ -400,3 +400,30 @@ def password_reset_confirm(request, uidb64, token):
             return Response({'message': 'Password has been reset successfully.'}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     return Response({'message': 'Invalid token or user ID.'}, status=status.HTTP_400_BAD_REQUEST)
+
+# View to retrieve the authenticated user's profile (username and email)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])  # Ensure the user is authenticated
+@extend_schema(
+    responses={
+        200: UserProfileSerializer,
+        401: OpenApiExample(
+            'Unauthorized',
+            value={'status': 'error', 'message': 'Authentication required'}
+        )
+    }
+)
+def user_profile(request):
+    try:
+        # Get the current authenticated user
+        user = request.user
+
+        # Serialize the user data (username and email)
+        serializer = UserProfileSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except User.DoesNotExist:
+        return Response(
+            {'status': 'error', 'message': 'User not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
