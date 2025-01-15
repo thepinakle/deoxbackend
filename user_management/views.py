@@ -25,6 +25,7 @@ from drf_yasg import openapi
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
+from .serializers import UserProfileSerializer 
 
 class UserCreateView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -403,7 +404,7 @@ def password_reset_confirm(request, uidb64, token):
 
 # View to retrieve the authenticated user's profile (username and email)
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])  # Ensure the user is authenticated
+@permission_classes([IsAuthenticated])  # Ensure the user is authenticated
 @extend_schema(
     responses={
         200: UserProfileSerializer,
