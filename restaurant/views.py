@@ -24,10 +24,18 @@ from decimal import Decimal
 from .utils import calculate_delivery_fee
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from .serializers import UpdateDeliveryStatusSerializer
+from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from .models import Cart
 import time
+
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from .models import All_Orders
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.http import JsonResponse
@@ -509,47 +517,45 @@ from rest_framework.permissions import IsAuthenticated
 from restaurant.models import All_Orders
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 @swagger_auto_schema(
     method='get',
-    operation_summary="View orders for the authenticated user",
-    operation_description="Retrieve all orders associated with the currently authenticated user.",
+    operation_description="View orders for the authenticated user",
     responses={
-        200: openapi.Response(
-            description="A list of orders for the authenticated user",
-            examples={
-                "application/json": [
-                    {
-                        "order_no": "ORD12345",
-                        "total": "29.99",
-                        "date": "2025-01-08T12:34:56",
-                        "delivery_status": "on_transit",
-                        "restaurant": {
-                            "id": 1,
-                            "name": "Restaurant A"
-                        },
-                        "items": [
-                            {
-                                "product_name": "Burger",
-                                "quantity": 2,
-                                "price": "5.99",
-                                "total": "11.98"
-                            },
-                            {
-                                "product_name": "Fries",
-                                "quantity": 1,
-                                "price": "3.99",
-                                "total": "3.99"
+        200: openapi.Response('Successful operation', openapi.Schema(
+            type=openapi.TYPE_ARRAY,
+            items=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'order_no': openapi.Schema(type=openapi.TYPE_STRING),
+                    'total': openapi.Schema(type=openapi.TYPE_STRING),
+                    'date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                    'delivery_status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'restaurant': openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            'name': openapi.Schema(type=openapi.TYPE_STRING)
+                        }
+                    ),
+                    'items': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'product_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                'quantity': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'price': openapi.Schema(type=openapi.TYPE_STRING),
+                                'total': openapi.Schema(type=openapi.TYPE_STRING)
                             }
-                        ]
-                    }
-                ]
-            }
-        ),
-        401: openapi.Response(
-            description="Unauthorized access",
-            examples={"application/json": {"error": "Authentication credentials were not provided."}}
-        )
+                        )
+                    )
+                }
+            )
+        )),
+        404: openapi.Response('No orders found for this user')
     }
 )
 @api_view(['GET'])
@@ -588,6 +594,8 @@ def api_view_orders(request):
         })
 
     return Response(order_data)
+
+
 
 @swagger_auto_schema(
     method='get',
@@ -645,32 +653,30 @@ def api_view_products(request):
     serialized_products = ProductSerializer(products, many=True).data
 
     return Response(serialized_products)
-
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import Products
+from django.shortcuts import get_object_or_404
+from .models import Products, Restaurant
 from .serializers import ProductSerializer
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def api_products_by_restaurant_view(request, restaurant_id):
+def api_products_by_restaurant_view(request, restaurant_name):
     """
-    View to list products of a specific restaurant by restaurant ID
+    View to list products of a specific restaurant by restaurant name
     """
-    try:
-        # Filter products based on the restaurant id
-        products = Products.objects.filter(restaurant__id=restaurant_id)
+    # Get the restaurant object based on the name
+    restaurant = get_object_or_404(Restaurant, name=restaurant_name)
 
-        # Serialize the filtered products
-        serialized_products = ProductSerializer(products, many=True)
+    # Filter products based on the restaurant object
+    products = Products.objects.filter(restaurant=restaurant)
 
-        # Return the serialized data
-        return Response(serialized_products.data)
+    # Serialize the filtered products
+    serialized_products = ProductSerializer(products, many=True)
 
-    except Products.DoesNotExist:
-        # Handle the case where the restaurant has no products
-        return Response({"detail": "Products not found for this restaurant"}, status=404)
+    # Return the serialized data
+    return Response(serialized_products.data)
 
 
 @api_view(['PUT'])
@@ -707,3 +713,57 @@ def api_all_orders(request):
     orders = All_Orders.objects.all()
     serialized_orders = AllOrdersSerializer(orders, many=True)
     return Response(serialized_orders.data)
+
+
+
+
+
+@csrf_exempt
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_delivery_status(request, order_no):
+    try:
+        order = All_Orders.objects.get(order_no=order_no)
+    except All_Orders.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = UpdateDeliveryStatusSerializer(order, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        if order.delivery_status == 'complete':  # Check if the status is 'complete'
+            order.delete()  # Delete the order
+            return Response({'message': 'Order completed and deleted.'}, status=status.HTTP_204_NO_CONTENT)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from rest_framework.permissions import IsAuthenticated
+
+@csrf_exempt
+@swagger_auto_schema(
+    method='patch',
+    operation_description="Update the delivery status of an order",
+    responses={
+        200: openapi.Response('Successful operation', UpdateDeliveryStatusSerializer),
+        204: openapi.Response('Order completed and deleted'),
+        400: openapi.Response('Bad request'),
+        404: openapi.Response('Order not found'),
+    },
+    request_body=UpdateDeliveryStatusSerializer
+)
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_delivery_status(request, order_no):
+    try:
+        order = All_Orders.objects.get(order_no=order_no)
+    except All_Orders.DoesNotExist:
+        return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = UpdateDeliveryStatusSerializer(order, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        if order.delivery_status == 'complete':
+            order.delete()  
+            return Response({'message': 'Order completed and deleted.'}, status=status.HTTP_204_NO_CONTENT)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

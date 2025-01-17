@@ -18,7 +18,7 @@ class PaymentsAdmin(admin.ModelAdmin):
 
 @admin.register(All_Orders)
 class AllOrdersAdmin(admin.ModelAdmin):
-    list_display = ('user', 'mobile', 'hostel_name', 'block_number', 'room_number', 'date', 'order_no', 'total')
+    list_display = ('user', 'mobile', 'hostel_name', 'block_number', 'room_number', 'date', 'order_no', 'total', 'delivery_status')  # Added delivery_status
     search_fields = ('user__username', 'mobile', 'order_no')
 
 @admin.register(OrderItems)

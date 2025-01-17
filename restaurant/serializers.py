@@ -24,3 +24,14 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Products
         fields = ['id', 'product_name', 'product_price', 'category', 'description', 'product_image']
+
+
+
+from rest_framework import serializers
+from .models import All_Orders
+
+class UpdateDeliveryStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = All_Orders
+        fields = ['delivery_status']
+

@@ -1,11 +1,14 @@
 from django.urls import path
 from . import views
 from .views import list_orders_by_restaurant
+from .views import update_delivery_status
 
 urlpatterns = [
     path('restaurants/', views.restaurant_list, name='restaurant_list'),
-    path('restaurants/<int:restaurant_id>/', views.restaurant_detail, name='restaurant_detail'),
+    path('api/orders/<str:order_no>/update-delivery-status/', update_delivery_status, name='update-delivery-status'),
+    path('restaurants/<str:restaurant_name>/', views.restaurant_detail, name='restaurant_detail'),
     path('cart/add/', views.add_to_cart, name='add_to_cart'),
+
     path('order/create/', views.create_order, name='create_order'),
     path('cart/view/', views.view_cart, name='view_cart'),
     path('cart/remove/<int:item_id>/', views.remove_from_cart, name='remove_from_cart'),

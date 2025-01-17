@@ -2,8 +2,8 @@
 
 def calculate_delivery_fee(total_amount):
     """Calculate delivery fee based on the total order amount."""
-    if total_amount < 5:
-        return 0
+    if total_amount < 75:
+        return 11
     elif 75 <= total_amount <= 150:
         return 21
     elif 151 <= total_amount <= 200:
