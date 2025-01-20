@@ -30,6 +30,13 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from .models import Cart
 import time
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from .models import Products, Restaurant
+from .serializers import ProductSerializer
+
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -653,18 +660,21 @@ def api_view_products(request):
     serialized_products = ProductSerializer(products, many=True).data
 
     return Response(serialized_products)
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
-from .models import Products, Restaurant
-from .serializers import ProductSerializer
 
+@swagger_auto_schema(
+    methods=['get'],  
+    operation_description="Retrieve a list of products for a specific restaurant based on its name.",
+    responses={
+        200: ProductSerializer(many=True),
+        404: openapi.Response(description="Restaurant not found", schema=openapi.Schema(type=openapi.TYPE_OBJECT, properties={'detail': openapi.Schema(type=openapi.TYPE_STRING)})),
+        500: openapi.Response(description="Internal server error")
+    }
+)
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def api_products_by_restaurant_view(request, restaurant_name):
     """
-    View to list products of a specific restaurant by restaurant name
+    View to list products of a specific restaurant by restaurant name.
     """
     # Get the restaurant object based on the name
     restaurant = get_object_or_404(Restaurant, name=restaurant_name)
@@ -677,6 +687,7 @@ def api_products_by_restaurant_view(request, restaurant_name):
 
     # Return the serialized data
     return Response(serialized_products.data)
+
 
 
 @api_view(['PUT'])
@@ -714,7 +725,7 @@ def api_all_orders(request):
     serialized_orders = AllOrdersSerializer(orders, many=True)
     return Response(serialized_orders.data)
 
-
+#Donatello is a fellow
 
 
 
