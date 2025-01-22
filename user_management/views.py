@@ -404,7 +404,7 @@ def password_reset_confirm(request, uidb64, token):
 
 # View to retrieve the authenticated user's profile (username and email)
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])  # Ensure the user is authenticated
+@permission_classes([AllowAny])  # Ensure the user is authenticated
 @extend_schema(
     responses={
         200: UserProfileSerializer,

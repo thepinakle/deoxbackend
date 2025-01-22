@@ -1,6 +1,6 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from .views import UserCreateView, ResetPasswordView, password_reset_confirm, LoginView, DeliveryListView, MarkDeliveryCompleteView, assign_hostels_to_delivery_personnel, hostel_orders, list_orders_by_hostel_block, list_orders_by_team_member
+from .views import UserCreateView, ResetPasswordView, password_reset_confirm, LoginView, DeliveryListView, MarkDeliveryCompleteView, assign_hostels_to_delivery_personnel, hostel_orders, list_orders_by_hostel_block, list_orders_by_team_member,user_profile
 
 urlpatterns = [
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
@@ -15,4 +15,5 @@ urlpatterns = [
     path('hostel-orders/', hostel_orders, name='hostel_orders'),
     path('orders_by_hostel_block/', list_orders_by_hostel_block, name='orders_by_hostel_block'),
     path('orders_by_team_member/', list_orders_by_team_member, name='orders_by_team_member'),
+    path('user_profile/', user_profile, name='user_profile'),
 ]

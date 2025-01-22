@@ -18,9 +18,10 @@ urlpatterns = [
     path('api/products/<str:category>/', views.api_products_by_category, name='api_products_by_category'),
     path('api/orders/', views.api_view_orders, name='api_view_orders'),
     path('api/products/', views.api_view_products, name='api_view_products'),
+    path('products/<str:product_name>/',views.api_view_product, name='product-detail'),
    #  path('api/products/<str:restaurant_name>/', views.api_products_by_restaurant, name='api_products_by_restaurant'),
     # path('api/orders/update-status/<String:order_id>/', views.update_order_delivery_status, name='update_order_delivery_status'),
     # path('api/products/<int:restaurant_id>/', views.api_products_by_restaurant, name='api_products_by_restaurant'),
      # path('api/products/restaurant/<int:restaurant_id>/', views.api_products_by_restaurant_view, name='api_products_by_restaurant'),
-      path('cart/delivery-fee/', views.get_delivery_fee, name='get_delivery_fee'),
+  path('cart/delivery-fee/', views.get_delivery_fee, name='get_delivery_fee'),
 ]

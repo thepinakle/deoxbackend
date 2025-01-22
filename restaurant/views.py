@@ -690,6 +690,24 @@ def api_products_by_restaurant_view(request, restaurant_name):
 
 
 
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def api_view_product(request, product_name):
+    """
+    Retrieve a specific product by name, including its picture, price, and the restaurant it is found in.
+    """
+    try:
+        product = Products.objects.get(product_name=product_name)
+    except Products.DoesNotExist:
+        return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = ProductSerializer(product)
+    return Response(serializer.data)
+
+
+
 @api_view(['PUT'])
 @permission_classes([IsAdminUser])
 def update_order_delivery_status(request, order_id):
