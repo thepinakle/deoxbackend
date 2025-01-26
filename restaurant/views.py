@@ -80,17 +80,39 @@ def format_phone_number(phone_number):
 def add_to_cart(request):
     try:
         product_id = request.data.get('product_id')
-        product = Product.objects.get(id=product_id)
+        product = Products.objects.get(id=product_id)
         cart_item, created = Cart.objects.get_or_create(user=request.user, product=product)
         if not created:
             cart_item.quantity += 1
             cart_item.save()
         return JsonResponse({'message': 'Item added to cart', 'quantity': cart_item.quantity}, status=200)
-    except Product.DoesNotExist:
+    except Products.DoesNotExist:
         return JsonResponse({'error': 'Product not found'}, status=404)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remove_to_cart(request):
+    try:
+        product_id = request.data.get('product_id')
+        product = Products.objects.get(id=product_id)
+        cart_item, created = Cart.objects.get_or_create(user=request.user, product=product)
+        if not created:
+            cart_item.quantity -= 1
+            cart_item.save()
+        return JsonResponse({'message': 'Item removed from cart', 'quantity': cart_item.quantity}, status=200)
+    except Products.DoesNotExist:
+        return JsonResponse({'error': 'Product not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+
+
+
+
 
 @swagger_auto_schema(
     method='post',
@@ -119,7 +141,7 @@ def add_to_cart(request):
 def remove_from_cart(request):
     try:
         product_id = request.data.get('product_id')
-        product = Product.objects.get(id=product_id)
+        product = Products.objects.get(id=product_id)
         cart_item = Cart.objects.get(user=request.user, product=product)
         if (cart_item.quantity > 1):
             cart_item.quantity -= 1
@@ -127,7 +149,7 @@ def remove_from_cart(request):
         else:
             cart_item.delete()
         return JsonResponse({'message': 'Item removed from cart', 'quantity': cart_item.quantity if cart_item.quantity > 0 else 0}, status=200)
-    except Product.DoesNotExist:
+    except Products.DoesNotExist:
         return JsonResponse({'error': 'Product not found'}, status=404)
     except Cart.DoesNotExist:
         return JsonResponse({'error': 'Item not in cart'}, status=404)
@@ -135,6 +157,25 @@ def remove_from_cart(request):
         logger.error(f"Unexpected error: {e}")
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+@swagger_auto_schema(
+    method='get',
+    operation_description="Retrieve the delivery fee for the items in the user's cart",
+    responses={
+        200: openapi.Response('Delivery fee calculated successfully', openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'message': openapi.Schema(type=openapi.TYPE_STRING),
+                'total_price': openapi.Schema(type=openapi.TYPE_NUMBER, format='decimal'),
+                'delivery_fee': openapi.Schema(type=openapi.TYPE_NUMBER, format='decimal')
+            }
+        )),
+        400: openapi.Response('Cart is empty'),
+        500: openapi.Response('An unexpected error occurred')
+    }
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_delivery_fee(request):
@@ -155,7 +196,9 @@ def get_delivery_fee(request):
             'total_price': total_price,
             'delivery_fee': delivery_fee
         })
-
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)

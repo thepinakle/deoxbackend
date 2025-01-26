@@ -3,7 +3,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from . import views
 from .views import list_orders_by_restaurant
 from .views import update_delivery_status
-from .views import add_to_cart, remove_from_cart
+from .views import add_to_cart, remove_from_cart,remove_to_cart
 from .views import register_restaurant_owner, login_restaurant_owner, view_orders
 
 urlpatterns = [
@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/orders/<str:order_no>/update-delivery-status/', update_delivery_status, name='update-delivery-status'),
     path('restaurants/<str:restaurant_name>/', views.restaurant_detail, name='restaurant_detail'),
     path('cart/add/', add_to_cart, name='add_to_cart'),
+    #path('cart/minus', remove_to_cart, name='the_minus button'),
     path('restaurant-products/<str:restaurant_name>/', views.api_products_by_restaurant_view, name='api_products_by_restaurant'),
     path('order/create/', views.create_order, name='create_order'),
     path('cart/view/', views.view_cart, name='view_cart'),
@@ -26,7 +27,7 @@ urlpatterns = [
     # path('api/orders/update-status/<String:order_id>/', views.update_order_delivery_status, name='update_order_delivery_status'),
     # path('api/products/<int:restaurant_id>/', views.api_products_by_restaurant, name='api_products_by_restaurant'),
      # path('api/products/restaurant/<int:restaurant_id>/', views.api_products_by_restaurant_view, name='api_products_by_restaurant'),
-  path('cart/delivery-fee/', views.get_delivery_fee, name='get_delivery_fee'),
+  path('deliveryfee/', views.get_delivery_fee, name='get_delivery_fee'),
     path('register/', register_restaurant_owner, name='register_restaurant_owner'),
     path('login/', login_restaurant_owner, name='login_restaurant_owner'),
     path('orders/', view_orders, name='view_orders'),
