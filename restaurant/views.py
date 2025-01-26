@@ -79,33 +79,61 @@ def format_phone_number(phone_number):
 @permission_classes([IsAuthenticated])
 def add_to_cart(request):
     try:
-        data = json.loads(request.body)
-        product_id = data['product_id']
-        quantity = data['quantity']
-
-        product = get_object_or_404(Products, id=product_id)
+        product_id = request.data.get('product_id')
+        product = Product.objects.get(id=product_id)
         cart_item, created = Cart.objects.get_or_create(user=request.user, product=product)
         if not created:
-            cart_item.quantity += quantity
-        else:
-            cart_item.quantity = quantity
-        cart_item.save()
-
-        return JsonResponse({'message': 'Item added to cart', 'cart_item_id': cart_item.id})
-    except json.JSONDecodeError:
-        logger.error("Invalid JSON payload")
-        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
-    except KeyError as e:
-        logger.error(f"Missing key in request payload: {e}")
-        return JsonResponse({'error': f"Missing key: {e}"}, status=400)
+            cart_item.quantity += 1
+            cart_item.save()
+        return JsonResponse({'message': 'Item added to cart', 'quantity': cart_item.quantity}, status=200)
+    except Product.DoesNotExist:
+        return JsonResponse({'error': 'Product not found'}, status=404)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
-    
 
-
-
- 
+@swagger_auto_schema(
+    method='post',
+    operation_description="Remove an item from the cart",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'product_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the product to remove')
+        }
+    ),
+    responses={
+        200: openapi.Response('Item removed from cart', openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'message': openapi.Schema(type=openapi.TYPE_STRING),
+                'quantity': openapi.Schema(type=openapi.TYPE_INTEGER)
+            }
+        )),
+        404: openapi.Response('Product not found'),
+        404: openapi.Response('Item not in cart'),
+        500: openapi.Response('An unexpected error occurred')
+    }
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remove_from_cart(request):
+    try:
+        product_id = request.data.get('product_id')
+        product = Product.objects.get(id=product_id)
+        cart_item = Cart.objects.get(user=request.user, product=product)
+        if (cart_item.quantity > 1):
+            cart_item.quantity -= 1
+            cart_item.save()
+        else:
+            cart_item.delete()
+        return JsonResponse({'message': 'Item removed from cart', 'quantity': cart_item.quantity if cart_item.quantity > 0 else 0}, status=200)
+    except Product.DoesNotExist:
+        return JsonResponse({'error': 'Product not found'}, status=404)
+    except Cart.DoesNotExist:
+        return JsonResponse({'error': 'Item not in cart'}, status=404)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -299,7 +327,7 @@ def view_cart(request):
 def remove_from_cart(request, item_id):
     cart_item = get_object_or_404(Cart, id=item_id, user=request.user)
     cart_item.delete()
-    return JsonResponse({'status': 'success', 'message': 'Item removed from cart'})
+    return JsonResponse({'status': 'success', 'message': 'Item removed fromt cart'})
 
 @csrf_exempt
 @extend_schema(
@@ -379,7 +407,6 @@ def mpesa_payment_request(request):
 def mpesa_callback(request):
     if request.method == 'POST':
         data = json.loads(request.body)
-        # Your existing code here
         pass
 
 def restaurant_list(request):
@@ -796,3 +823,156 @@ def update_delivery_status(request, order_no):
             return Response({'message': 'Order completed and deleted.'}, status=status.HTTP_204_NO_CONTENT)
         return Response(serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate, login
+from django.http import JsonResponse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from .models import Restaurant, All_Orders
+@api_view(['POST'])
+def register_restaurant_owner(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    restaurant_name = request.data.get('restaurant_name')
+
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({'error': 'Username already exists'}, status=400)
+
+    user = User.objects.create_user(username=username, password=password)
+    restaurant = Restaurant.objects.create(name=restaurant_name, user=user)
+    return JsonResponse({'message': 'Restaurant owner registered successfully'}, status=201)
+
+@api_view(['POST'])
+def login_restaurant_owner(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    user = authenticate(request, username=username, password=password)
+    if user is not None:
+        login(request, user)
+        return JsonResponse({'message': 'Login successful'}, status=200)
+    else:
+        return JsonResponse({'error': 'Invalid credentials'}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def view_orders(request):
+    try:
+        restaurant = Restaurant.objects.get(user=request.user)
+        orders = Order.objects.filter(restaurant=restaurant)
+        orders_data = [{'id': order.id, 'details': order.details} for order in orders]  # Adjust based on your Order model
+        return JsonResponse({'orders': orders_data}, status=200)
+    except Restaurant.DoesNotExist:
+        return JsonResponse({'error': 'Restaurant not found'}, status=404)
+
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
+from django.http import JsonResponse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken
+from .models import Restaurant, All_Orders
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+def get_tokens_for_user(user):
+    refresh = RefreshToken.for_user(user)
+    return {
+        'refresh': str(refresh),
+        'access': str(refresh.access_token),
+    }
+
+@swagger_auto_schema(
+    method='post',
+    operation_description="Register a new restaurant owner",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'username': openapi.Schema(type=openapi.TYPE_STRING, description='Username of the restaurant owner'),
+            'password': openapi.Schema(type=openapi.TYPE_STRING, description='Password of the restaurant owner'),
+            'restaurant_name': openapi.Schema(type=openapi.TYPE_STRING, description='Name of the restaurant')
+        }
+    ),
+    responses={
+        201: openapi.Response('Restaurant owner registered successfully'),
+        400: openapi.Response('Username already exists')
+    }
+)
+@api_view(['POST'])
+def register_restaurant_owner(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    restaurant_name = request.data.get('restaurant_name')
+
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({'error': 'Username already exists'}, status=400)
+
+    user = User.objects.create_user(username=username, password=password)
+    restaurant = Restaurant.objects.create(name=restaurant_name, user=user)
+    return JsonResponse({'message': 'Restaurant owner registered successfully'}, status=201)
+
+@swagger_auto_schema(
+    method='post',
+    operation_description="Login a restaurant owner",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'username': openapi.Schema(type=openapi.TYPE_STRING, description='Username of the restaurant owner'),
+            'password': openapi.Schema(type=openapi.TYPE_STRING, description='Password of the restaurant owner')
+        }
+    ),
+    responses={
+        200: openapi.Response('Login successful', openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'message': openapi.Schema(type=openapi.TYPE_STRING),
+                'tokens': openapi.Schema(type=openapi.TYPE_OBJECT, properties={
+                    'refresh': openapi.Schema(type=openapi.TYPE_STRING),
+                    'access': openapi.Schema(type=openapi.TYPE_STRING)
+                })
+            }
+        )),
+        400: openapi.Response('Invalid credentials')
+    }
+)
+@api_view(['POST'])
+def login_restaurant_owner(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    user = authenticate(request, username=username, password=password)
+    if user is not None:
+        tokens = get_tokens_for_user(user)
+        return JsonResponse({'message': 'Login successful', 'tokens': tokens}, status=200)
+    else:
+        return JsonResponse({'error': 'Invalid credentials'}, status=400)
+
+@swagger_auto_schema(
+    method='get',
+    operation_description="View orders for the logged-in restaurant owner",
+    responses={
+        200: openapi.Response('Orders retrieved successfully', openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'orders': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT, properties={
+                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'order_no': openapi.Schema(type=openapi.TYPE_STRING),
+                    'total': openapi.Schema(type=openapi.TYPE_NUMBER, format='decimal'),
+                    'delivery_status': openapi.Schema(type=openapi.TYPE_STRING)
+                }))
+            }
+        )),
+        404: openapi.Response('Restaurant not found')
+    }
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def view_orders(request):
+    try:
+        restaurant = Restaurant.objects.get(user=request.user)
+        orders = All_Orders.objects.filter(restaurant=restaurant)
+        orders_data = [{'id': order.id, 'order_no': order.order_no, 'total': order.total, 'delivery_status': order.delivery_status} for order in orders]
+        return JsonResponse({'orders': orders_data}, status=200)
+    except Restaurant.DoesNotExist:
+        return JsonResponse({'error': 'Restaurant not found'}, status=404)

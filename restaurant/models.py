@@ -6,6 +6,7 @@ from user_management.models import Hostel  # Import the Hostel model
 
 class Restaurant(models.Model):
     name = models.CharField(max_length=100)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     description = models.TextField(default='Default description')  # Add default value
     picture = models.ImageField(upload_to='restaurant_pictures/', null=True, blank=True)  # Add picture field
     location = models.CharField(max_length=255, default='Default location')  # Add default value

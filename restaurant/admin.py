@@ -3,7 +3,7 @@ from .models import Restaurant, Products, Payments, All_Orders, OrderItems, Rest
 
 @admin.register(Restaurant)
 class RestaurantAdmin(admin.ModelAdmin):
-    list_display = ('name', 'location', 'description')  # Ensure these fields exist in the Restaurant model
+    list_display = ('name', 'location', 'description', 'user')  # Ensure these fields exist in the Restaurant model
     search_fields = ('name', 'location')
 
 @admin.register(Products)
