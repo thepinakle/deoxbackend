@@ -21,6 +21,10 @@ class Products(models.Model):
     category = models.CharField(max_length=30)
     description = models.TextField(max_length=200)
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE)
+    carbohydrates = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    proteins = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    fats = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    kilocalories = models.DecimalField(max_digits=6, decimal_places=2, default=0.0)
 
     def __str__(self):
         return self.product_name

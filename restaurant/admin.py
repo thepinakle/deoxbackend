@@ -8,7 +8,7 @@ class RestaurantAdmin(admin.ModelAdmin):
 
 @admin.register(Products)
 class ProductsAdmin(admin.ModelAdmin):
-    list_display = ('product_name', 'product_price', 'category', 'restaurant')
+    list_display = ('product_name', 'product_price', 'category', 'restaurant', 'carbohydrates', 'proteins', 'fats', 'kilocalories')
     search_fields = ('product_name', 'category', 'restaurant__name')
 
 @admin.register(Payments)
@@ -23,7 +23,7 @@ class AllOrdersAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItems)
 class OrderItemsAdmin(admin.ModelAdmin):
-    list_display = ('order', 'product', 'quantity', 'price', 'total')
+    list_display = ('order', 'product', 'quantity', 'price')
     search_fields = ('order__order_no', 'product__product_name')
 
 @admin.register(RestaurantOrderView)
@@ -33,5 +33,5 @@ class RestaurantOrderViewAdmin(admin.ModelAdmin):
 
 @admin.register(Cart)
 class CartAdmin(admin.ModelAdmin):
-    list_display = ('user', 'product', 'quantity', 'price', 'total', 'date_added')
+    list_display = ('user', 'product', 'quantity', 'price')
     search_fields = ('user__username', 'product__product_name')

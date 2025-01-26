@@ -186,7 +186,7 @@ def get_delivery_fee(request):
             return JsonResponse({'error': 'Cart is empty'}, status=400)
 
         # Calculate the total price of the items in the cart
-        total_price = sum(item.quantity * item.product.price for item in cart_items)
+        total_price = sum(item.quantity * item.product.product_price for item in cart_items)
 
         # Calculate the delivery fee based on the total price
         delivery_fee = calculate_delivery_fee(total_price)
