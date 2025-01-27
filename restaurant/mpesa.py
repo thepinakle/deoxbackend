@@ -52,17 +52,4 @@ def lipa_na_mpesa_online(phone_number, amount, account_reference, transaction_de
         "TransactionDesc": transaction_desc
     }
 
-    try:
-        response = requests.post(api_url, json=payload, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error making M-Pesa request: {e}")
-        raise Exception("Failed to make M-Pesa request")
-
-# Example usage
-try:
-    response = lipa_na_mpesa_online("254712345678", 100, "AccountRef", "TransactionDesc")
-    print(response)
-except Exception as e:
-    print(f"Error: {e}")
+    

@@ -3,7 +3,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
@@ -16,27 +16,142 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import uuid
 from .serializers import AllOrdersSerializer
+from .serializers import UpdateDeliveryStatusSerializer
 from rest_framework import serializers
-from .models import Restaurant, Products
 from .serializers import RestaurantSerializer, ProductSerializer
 from rest_framework.permissions import IsAdminUser
 from decimal import Decimal
 from .utils import calculate_delivery_fee
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from .serializers import UpdateDeliveryStatusSerializer
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-from .models import Cart
-import time
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
-from .models import Products, Restaurant
-from .serializers import ProductSerializer
+from openai import OpenAI
+import os
 
+
+client = OpenAI(api_key="sk-0858dbbbdf494ff08e518e49be95e1a9", base_url="https://api.deepseek.com")
+
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from django.http import JsonResponse
+import logging
+from openai import OpenAI
+
+
+logger = logging.getLogger(__name__)
+
+client = OpenAI(api_key="sk-0858dbbbdf494ff08e518e49be95e1a9", base_url="https://api.deepseek.com")
+
+# Define the request body schema
+chat_request_body = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        'message': openapi.Schema(type=openapi.TYPE_STRING, description='User message')
+    },
+    required=['message']
+)
+
+# Define the response body schema
+chat_response_body = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        'message': openapi.Schema(type=openapi.TYPE_STRING, description='Bot response')
+    }
+)
+
+@swagger_auto_schema(
+    method='post',
+    operation_description="Chat with the bot to get food recommendations and advice",
+    request_body=chat_request_body,
+    responses={
+        200: openapi.Response('Successful operation', chat_response_body),
+        400: openapi.Response('No message provided'),
+        500: openapi.Response('An unexpected error occurred')
+    }
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def chat_with_bot(request):
+    user_input = request.data.get('message')
+    if not user_input:
+        return JsonResponse({'error': 'No message provided'}, status=400)
+
+    messages = [
+        {"role": "system", "content": """You are a fun assistant for a food order platform named deox located at egerton university founded by Deon.
+         Your goal is to help users find the perfect food order. offer advice on healthy food options, and provide recommendations based on user preferences.
+         You should be able to answer questions about the food menu, suggest dishes, and offer suggestions for dietary restrictions here being creative if user has not provided much info
+         students are more familiar with njokerio, gate or palatte this are places the take their food from.
+         
+         Show your reasoning process in this format:
+
+1. THOUGHT PROCESS: Break down how you're approaching the question
+2. ANALYSIS: Explain key considerations and factors
+3. CONCLUSION: Provide your final response
+
+Keep the tone light and entertaining while showing your work."""},
+        {"role": "user", "content": user_input}
+    ]
+
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-reasoner",
+            messages=messages,
+            temperature=1.0,
+            stream=True
+        )
+
+        bot_response = ""
+        for chunk in response:
+            if chunk.choices[0].delta.content:
+                bot_response += chunk.choices[0].delta.content
+
+        return JsonResponse({'message': bot_response}, status=200)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+
+
+
+@swagger_auto_schema(
+    method='get',
+    operation_description="Retrieve the delivery fee for the items in the user's cart",
+    responses={
+        200: openapi.Response('Delivery fee calculated successfully', openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'message': openapi.Schema(type=openapi.TYPE_STRING),
+                'total_price': openapi.Schema(type=openapi.TYPE_NUMBER, format='decimal'),
+                'delivery_fee': openapi.Schema(type=openapi.TYPE_NUMBER, format='decimal')
+            }
+        )),
+        400: openapi.Response('Cart is empty'),
+        500: openapi.Response('An unexpected error occurred')
+    }
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_delivery_fee(request):
+    try:
+        # Retrieve the items in the user's cart
+        cart_items = Cart.objects.filter(user=request.user)
+        if not cart_items.exists():
+            return JsonResponse({'error': 'Cart is empty'}, status=400)
+
+        # Calculate the total price of the items in the cart
+        total_price = sum(item.quantity * item.product.product_price for item in cart_items)
+
+        # Calculate the delivery fee based on the total price
+        delivery_fee = calculate_delivery_fee(total_price)
+
+        return JsonResponse({
+            'message': 'Delivery fee calculated successfully',
+            'total_price': total_price,
+            'delivery_fee': delivery_fee
+        })
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
+
+# Add the new view to your urls.py
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -141,7 +256,7 @@ def remove_to_cart(request):
 def remove_from_cart(request):
     try:
         product_id = request.data.get('product_id')
-        product = Products.objects.get(id=product_id)
+        product = Products.objects.get(product_id=product_id)
         cart_item = Cart.objects.get(user=request.user, product=product)
         if (cart_item.quantity > 1):
             cart_item.quantity -= 1
