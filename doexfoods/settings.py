@@ -65,11 +65,12 @@ TEMPLATES = [
     },
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS =[
     "http://localhost:5173",
     'http://localhost:3000',
+    'https://deoxfoods.com'
 
 ]
 
@@ -81,10 +82,15 @@ WSGI_APPLICATION = 'doexfoods.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'deoxuzhz_deoxfoods',  # Replace with your actual database name
+        'USER': 'deoxuzhz_deoxfoods',  # Replace with your MySQL username
+        'PASSWORD': 'wdXryQ8Rd}&D',  # Replace with your MySQL password
+        'HOST': 'localhost',  # Use 'localhost' if your MySQL is running locally
+        'PORT': '3306',  # Default MySQL port
     }
 }
+
 
 
 # Password validation
@@ -178,11 +184,12 @@ EMAIL_HOST_USER = 'doncool933@gmail.com'
 EMAIL_HOST_PASSWORD = 'onxa lttw tpjh hxlu'
 #EVEN THOUGH ITS A SECURITY RIST IVE LEFT THESE DETAILS FOR TESTING PURPOSES .....YOURE ADVISED TO USE ENVIRONMENT VARIABLES
 # Frontend URL for password reset link
-FRONTEND_URL = 'http://localhost:8000'
+FRONTEND_URL = 'https://deoxfoods.com'
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
-BACKEND_URL = 'http://localhost:8000'
+BACKEND_URL = 'https://api.deoxfoods.com'
 
 # M-Pesa credentials
 MPESA_CONSUMER_KEY = config('MPESA_CONSUMER_KEY')
