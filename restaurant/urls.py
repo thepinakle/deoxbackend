@@ -4,7 +4,7 @@ from . import views
 from .views import list_orders_by_restaurant
 from .views import update_delivery_status
 from .views import add_to_cart, remove_from_cart,remove_to_cart
-from .views import register_restaurant_owner, login_restaurant_owner, view_orders, get_delivery_fee, chat_with_bot
+from .views import register_restaurant_owner, login_restaurant_owner, view_orders, get_delivery_fee, chat_with_deox
 
 urlpatterns = [
     path('restaurants/', views.restaurant_list, name='restaurant_list'),
@@ -33,5 +33,5 @@ urlpatterns = [
     path('orders/', view_orders, name='view_orders'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('chat/', chat_with_bot, name='chat_with_bot'),
+    path('chat/deox/', views.chat_with_deox, name='chat_with_deox'),
 ]

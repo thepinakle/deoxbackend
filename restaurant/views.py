@@ -35,13 +35,55 @@ from rest_framework.permissions import AllowAny
 from django.http import JsonResponse
 import logging
 from openai import OpenAI
-
+import google.generativeai as genai
+from deoxbackend.config import GEMINI_API_KEY
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key="sk-0858dbbbdf494ff08e518e49be95e1a9", base_url="https://api.deepseek.com")
+# Configure Gemini
+genai.configure(api_key=GEMINI_API_KEY)
 
-# Define the request body schema
+# Gemini model configuration
+generation_config = {
+    "temperature": 0,
+    "top_p": 0.95,
+    "top_k": 64,
+    "max_output_tokens": 8192,
+    "response_mime_type": "text/plain",
+}
+
+# Initialize Gemini model
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    generation_config=generation_config,
+    system_instruction="""You are Deox, a friendly,funny and energetic food ordering assistant at Egerton University created by Deon. 
+
+Your capabilities include:
+- Processing food orders from Njokerio, Gate, and Palatte locations
+- popular hotels from gate location are Nakshi, Newgolden fries, king'ang'i
+- hotels from njokerio are maggy's, 1960, johnes , cessils, coolshade and many more
+- Providing real-time menu information and prices
+- Estimating delivery times based on location within campus
+- Handling special dietary requirements (vegetarian, vegan, gluten-free, etc.)
+- Suggesting popular student meal combinations and deals
+- Offering healthy alternatives and nutritional information
+- Managing order modifications and special requests
+- Providing payment options (M-Pesa, Cash on Delivery)
+- Tracking order status and delivery updates
+
+When interacting:
+- Use casual, student-friendly language with occasional emojis
+- Confirm order details before finalizing
+- Suggest complementary items (drinks, sides, desserts)
+- Remember user preferences for future recommendations
+- Provide estimated preparation and delivery times
+- Share daily specials and student discounts
+- Help with group orders and split payments
+- Give recommendations based on time of day, weather, and events
+- Handle dietary restrictions with care and creativity
+- Maintain a database of popular orders from each location"""
+)
+
 chat_request_body = openapi.Schema(
     type=openapi.TYPE_OBJECT,
     properties={
@@ -50,7 +92,6 @@ chat_request_body = openapi.Schema(
     required=['message']
 )
 
-# Define the response body schema
 chat_response_body = openapi.Schema(
     type=openapi.TYPE_OBJECT,
     properties={
@@ -60,7 +101,7 @@ chat_response_body = openapi.Schema(
 
 @swagger_auto_schema(
     method='post',
-    operation_description="Chat with the bot to get food recommendations and advice",
+    operation_description="Chat with Deox, the food ordering assistant",
     request_body=chat_request_body,
     responses={
         200: openapi.Response('Successful operation', chat_response_body),
@@ -70,41 +111,29 @@ chat_response_body = openapi.Schema(
 )
 @api_view(['POST'])
 @permission_classes([AllowAny])
-def chat_with_bot(request):
+def chat_with_deox(request):
     user_input = request.data.get('message')
     if not user_input:
         return JsonResponse({'error': 'No message provided'}, status=400)
 
-    messages = [
-        {"role": "system", "content": """You are a fun assistant for a food order platform named deox located at egerton university founded by Deon.
-         Your goal is to help users find the perfect food order. offer advice on healthy food options, and provide recommendations based on user preferences.
-         You should be able to answer questions about the food menu, suggest dishes, and offer suggestions for dietary restrictions here being creative if user has not provided much info
-         students are more familiar with njokerio, gate or palatte this are places the take their food from.
-         
-         Show your reasoning process in this format:
-
-1. THOUGHT PROCESS: Break down how you're approaching the question
-2. ANALYSIS: Explain key considerations and factors
-3. CONCLUSION: Provide your final response
-
-Keep the tone light and entertaining while showing your work."""},
-        {"role": "user", "content": user_input}
-    ]
-
     try:
-        response = client.chat.completions.create(
-            model="deepseek-reasoner",
-            messages=messages,
-            temperature=1.0,
-            stream=True
-        )
-
-        bot_response = ""
-        for chunk in response:
-            if chunk.choices[0].delta.content:
-                bot_response += chunk.choices[0].delta.content
-
-        return JsonResponse({'message': bot_response}, status=200)
+        # Get or initialize chat history from session
+        history = request.session.get('chat_history', [])
+        
+        # Start chat session with history
+        chat_session = model.start_chat(history=history)
+        
+        # Get response from model
+        response = chat_session.send_message(user_input)
+        
+        # Update chat history
+        history.append({"role": "user", "parts": [user_input]})
+        history.append({"role": "model", "parts": [response.text]})
+        
+        # Store updated history in session
+        request.session['chat_history'] = history
+        
+        return JsonResponse({'message': response.text}, status=200)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
