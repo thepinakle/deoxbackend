@@ -51,8 +51,13 @@ class ResetPasswordView(generics.GenericAPIView):
         return Response({"detail": "Password reset email has been sent."}, status=status.HTTP_200_OK)
 
     def send_reset_email(self, user):
-        token = RefreshToken.for_user(user).access_token
-        reset_url = f"{settings.BACKEND_URL}/reset-password/{token}/"
+        # Generate token for password reset
+        token = default_token_generator.make_token(user)
+        uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+
+        # Create reset URL that the React app will handle
+        reset_url = f"http://localhost:5173/reset-password/{uidb64}/{token}/"
+
         send_mail(
             'Password Reset Request',
             f'Click the link to reset your password: {reset_url}',
